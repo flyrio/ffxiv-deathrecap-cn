@@ -193,7 +193,7 @@ public class DeathRecapWindow : Window {
 
             if (Service.PartyList.Length > 0) {
                 foreach (var pmem in Service.PartyList) {
-                    var id = pmem.ObjectId;
+                    var id = pmem.EntityId;
                     if (processed.Contains(id) || !plugin.DeathsPerPlayer.TryGetValue(id, out var pdeaths))
                         continue;
                     DrawItem(pdeaths, id);

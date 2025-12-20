@@ -6,7 +6,7 @@ namespace DeathRecap;
 public class ConditionEvaluator(DeathRecapPlugin plugin) {
     private static bool LookupPartyMember(uint actorId) {
         for (var i = 0; i < 8; i++)
-            if (Service.PartyList[i]?.ObjectId is { } id)
+            if (Service.PartyList[i]?.EntityId is { } id)
                 if (actorId == id)
                     return true;
         return false;

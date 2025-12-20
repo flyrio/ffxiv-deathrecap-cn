@@ -23,7 +23,8 @@ public class CombatEventCapture : IDisposable {
         GameObjectId* targetEntityIds);
 
     private delegate void ProcessPacketActorControlDelegate(
-        uint entityId, ActorControlCategory type, uint param1, uint param2, uint param3, uint param4, uint param5, uint param6, ulong param7, byte isReplay);
+        uint category, uint eventId, uint param1, uint param2, uint param3, uint param4, uint param5, uint param6, uint param7, uint param8, ulong targetId,
+        byte param9);
 
     private delegate void ProcessPacketEffectResultDelegate(uint targetId, IntPtr actionIntegrityData, byte isReplay);
 
@@ -57,7 +58,7 @@ public class CombatEventCapture : IDisposable {
             if (effectHeader->NumTargets == 0)
                 return;
 
-            var actionId = effectHeader->ActionType switch {
+            var actionId = (ActionType)effectHeader->ActionType switch {
                 ActionType.Mount => 0xD000000 + effectHeader->ActionId,
                 ActionType.Item => 0x2000000 + effectHeader->ActionId,
                 _ => effectHeader->SpellId
@@ -118,7 +119,7 @@ public class CombatEventCapture : IDisposable {
                                     DamageType = (DamageType)(actionEffect.Param1 & 0xF),
                                     Parried = actionEffect.Type == (int)ActionEffectType.ParriedDamage,
                                     Blocked = actionEffect.Type == (int)ActionEffectType.BlockedDamage,
-                                    DisplayType = effectHeader->ActionType
+                                    DisplayType = (ActionType)effectHeader->ActionType
                                 });
                             break;
                         case ActionEffectType.Heal:
@@ -141,8 +142,9 @@ public class CombatEventCapture : IDisposable {
     }
 
     private void ProcessPacketActorControlDetour(
-        uint entityId, ActorControlCategory type, uint param1, uint param2, uint param3, uint param4, uint param5, uint param6, ulong param7, byte isReplay) {
-        processPacketActorControlHook.Original(entityId, type, param1, param2, param3, param4, param5, param6, param7, isReplay);
+        uint entityId, uint category, uint param1, uint param2, uint param3, uint param4, uint param5, uint param6, uint param7, uint param8, ulong targetId,
+        byte param9) {
+        processPacketActorControlHook.Original(entityId, category, param1, param2, param3, param4, param5, param6, param7, param8, targetId, param9);
 
         try {
             if (!plugin.ConditionEvaluator.ShouldCapture(entityId))
@@ -151,7 +153,7 @@ public class CombatEventCapture : IDisposable {
             if (Service.ObjectTable.SearchById(entityId) is not IPlayerCharacter p)
                 return;
 
-            switch (type) {
+            switch ((ActorControlCategory)category) {
                 case ActorControlCategory.DoT: combatEvents.AddEntry(entityId, new CombatEvent.DoT { Snapshot = p.Snapshot(), Amount = param2 }); break;
                 case ActorControlCategory.HoT:
                     if (param1 != 0) {
