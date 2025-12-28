@@ -47,7 +47,7 @@ public class DeathRecapPlugin : IDalamudPlugin {
         pluginInterface.UiBuilder.OpenMainUi += () => Window.Toggle();
         pluginInterface.UiBuilder.OpenConfigUi += () => ConfigWindow.Toggle();
         Service.Framework.Update += FrameworkOnUpdate;
-        var commandInfo = new CommandInfo((_, _) => Window.Toggle()) { HelpMessage = "Open the death recap window" };
+        var commandInfo = new CommandInfo((_, _) => Window.Toggle()) { HelpMessage = "打开死亡复盘窗口" };
         Service.CommandManager.AddHandler("/deathrecap", commandInfo);
         Service.CommandManager.AddHandler("/dr", commandInfo);
 

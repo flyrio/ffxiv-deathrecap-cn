@@ -1,16 +1,16 @@
-name: Death Recap
+name: 死亡复盘
 author: Kouzukii
-punchline: Quickly figure out what killed you or your party members!
+punchline: 快速查明是什么杀死了你或你的小队成员！
 description: |-
-  Quickly figure out what killed you or your party members!
+  快速查明是什么杀死了你或你的小队成员！
 
-  Shows:
-  - Healing
-  - Damage taken
-  - Debuffs
-  - Buffs
-  - Barriers
-  - Addle, Feint, Reprisal on damage source
+  显示内容：
+  - 治疗
+  - 受到的伤害
+  - 减益效果
+  - 增益效果
+  - 护盾
+  - 对伤害来源的昏乱（Addle）、牵制（Feint）、雪仇（Reprisal）
 repo_url: https://github.com/flyrio/ffxiv-deathrecap-cn
 tags:
   - death
