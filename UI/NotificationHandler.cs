@@ -54,11 +54,11 @@ public class NotificationHandler : Window {
     public override void Draw() {
         windowWasMoved = ImGui.GetWindowPos() != initialPos;
 
-        WindowName = windowWasMoved ? "###deathRecapPopup" : "(Drag me somewhere)###deathRecapPopup";
+        WindowName = windowWasMoved ? "###deathRecapPopup" : "（可拖拽移动）###deathRecapPopup";
 
         var elapsed = (DateTime.Now - popupDeath?.TimeOfDeath)?.TotalSeconds;
         if (!plugin.Window.IsOpen && elapsed < 30) {
-            var label = $"Show Death Recap ({30 - elapsed:N0}s)";
+            var label = $"查看死亡复盘（{30 - elapsed:N0}秒）";
             if (popupDeath?.PlayerName is { } playerName)
                 label = AppendCenteredPlayerName(label, playerName);
 
@@ -110,10 +110,10 @@ public class NotificationHandler : Window {
                 break;
             case NotificationStyle.Chat:
                 var chatMsg = HasAuthor(plugin.Configuration.ChatType)
-                    ? new SeString(chatLinkPayload, new TextPayload(" has died "), new UIForegroundPayload(710), new TextPayload("[ Show Death Recap ]"),
+                    ? new SeString(chatLinkPayload, new TextPayload(" 战斗不能 "), new UIForegroundPayload(710), new TextPayload("[ 查看死亡复盘 ]"),
                         new UIForegroundPayload(0), new DeathNotificationPayload(death.TimeOfDeath.Ticks, death.PlayerId), RawPayload.LinkTerminator)
                     : new SeString(chatLinkPayload, new UIForegroundPayload(1), new TextPayload(death.PlayerName), new UIForegroundPayload(0),
-                        new TextPayload(" has died "), new UIForegroundPayload(710), new TextPayload("[ Show Death Recap ]"), new UIForegroundPayload(0),
+                        new TextPayload(" 战斗不能 "), new UIForegroundPayload(710), new TextPayload("[ 查看死亡复盘 ]"), new UIForegroundPayload(0),
                         new DeathNotificationPayload(death.TimeOfDeath.Ticks, death.PlayerId), RawPayload.LinkTerminator);
                 Service.ChatGui.Print(new XivChatEntry { Message = chatMsg, Type = plugin.Configuration.ChatType, Name = death.PlayerName });
                 break;
