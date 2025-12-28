@@ -71,11 +71,7 @@ public class CombatEventCapture : IDisposable {
             if (effectHeader->NumTargets == 0)
                 return;
 
-            var actionId = (ActionType)effectHeader->ActionType switch {
-                ActionType.Mount => 0xD000000 + effectHeader->ActionId,
-                ActionType.Item => 0x2000000 + effectHeader->ActionId,
-                _ => effectHeader->SpellId
-            };
+            var actionId = effectHeader->SpellId;
             Action? action = null;
             string? source = null;
             List<uint>? additionalStatus = null;
@@ -129,10 +125,10 @@ public class CombatEventCapture : IDisposable {
                                     Icon = action?.Icon,
                                     Crit = (actionEffect.Param0 & 0x20) == 0x20,
                                     DirectHit = (actionEffect.Param0 & 0x40) == 0x40,
-                                    DamageType = (DamageType)(actionEffect.Param1 & 0xF),
-                                    Parried = actionEffect.Type == (int)ActionEffectType.ParriedDamage,
+                                     DamageType = (DamageType)(actionEffect.Param1 & 0xF),
+                                     Parried = actionEffect.Type == (int)ActionEffectType.ParriedDamage,
                                      Blocked = actionEffect.Type == (int)ActionEffectType.BlockedDamage,
-                                     DisplayType = (ActionType)effectHeader->ActionType
+                                     DisplayType = ActionType.Item
                                  });
                             break;
                         case ActionEffectType.Heal:
