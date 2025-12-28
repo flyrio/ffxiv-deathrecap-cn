@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Hooking;
@@ -15,8 +16,9 @@ using Status = Lumina.Excel.Sheets.Status;
 namespace DeathRecap.Events;
 
 public class CombatEventCapture : IDisposable {
-    private readonly Dictionary<ulong, List<CombatEvent>> combatEvents = new();
+    private readonly Dictionary<ulong, Queue<CombatEvent>> combatEvents = new();
     private readonly DeathRecapPlugin plugin;
+    private DateTime lastCleanPerfLog = DateTime.MinValue;
 
     private unsafe delegate void ProcessPacketActionEffectDelegate(
         uint casterEntityId, Character* casterPtr, Vector3* targetPos, ActionEffectHandler.Header* header, ActionEffectHandler.TargetEffects* effects,
@@ -47,6 +49,17 @@ public class CombatEventCapture : IDisposable {
         processPacketActionEffectHook.Enable();
         processPacketActorControlHook.Enable();
         processPacketEffectResultHook.Enable();
+    }
+
+    private void AddCombatEvent(ulong actorId, CombatEvent combatEvent) {
+        if (combatEvents.TryGetValue(actorId, out var events)) {
+            events.Enqueue(combatEvent);
+            return;
+        }
+
+        var queue = new Queue<CombatEvent>(128);
+        queue.Enqueue(combatEvent);
+        combatEvents.Add(actorId, queue);
     }
 
     private unsafe void ProcessPacketActionEffectDetour(
@@ -100,7 +113,7 @@ public class CombatEventCapture : IDisposable {
                                 }
                             }
 
-                            combatEvents.AddEntry(actionTargetId,
+                            AddCombatEvent(actionTargetId,
                                 new CombatEvent.DamageTaken {
                                     // 1203 = Addle
                                     // 1195 = Feint
@@ -108,22 +121,22 @@ public class CombatEventCapture : IDisposable {
                                     //  860 = Dismantled
                                     // 1715 = Malodorous, BLU Bad Breath
                                     // 2115 = Conked, BLU Magic Hammer
-                                    // 3642 = Candy Cane, BLU Candy Cane
-                                    Snapshot = p.Snapshot(true, additionalStatus),
-                                    Source = source,
-                                    Amount = amount,
-                                    Action = action?.ActionCategory.RowId == 1 ? "Auto-attack" : action?.Name.ExtractText() ?? "",
+                                         // 3642 = Candy Cane, BLU Candy Cane
+                                     Snapshot = p.Snapshot(true, additionalStatus),
+                                     Source = source,
+                                     Amount = amount,
+                                     Action = action?.ActionCategory.RowId == 1 ? "Auto-attack" : action?.Name.ExtractText() ?? "",
                                     Icon = action?.Icon,
                                     Crit = (actionEffect.Param0 & 0x20) == 0x20,
                                     DirectHit = (actionEffect.Param0 & 0x40) == 0x40,
                                     DamageType = (DamageType)(actionEffect.Param1 & 0xF),
                                     Parried = actionEffect.Type == (int)ActionEffectType.ParriedDamage,
-                                    Blocked = actionEffect.Type == (int)ActionEffectType.BlockedDamage,
-                                    DisplayType = (ActionType)effectHeader->ActionType
-                                });
+                                     Blocked = actionEffect.Type == (int)ActionEffectType.BlockedDamage,
+                                     DisplayType = (ActionType)effectHeader->ActionType
+                                 });
                             break;
                         case ActionEffectType.Heal:
-                            combatEvents.AddEntry(actionTargetId,
+                            AddCombatEvent(actionTargetId,
                                 new CombatEvent.Healed {
                                     Snapshot = p.Snapshot(true),
                                     Source = source,
@@ -148,18 +161,18 @@ public class CombatEventCapture : IDisposable {
 
         try {
             if (!plugin.ConditionEvaluator.ShouldCapture(entityId))
-                return;
+             return;
 
             if (Service.ObjectTable.SearchById(entityId) is not IPlayerCharacter p)
                 return;
 
             switch ((ActorControlCategory)category) {
-                case ActorControlCategory.DoT: combatEvents.AddEntry(entityId, new CombatEvent.DoT { Snapshot = p.Snapshot(), Amount = param2 }); break;
+                case ActorControlCategory.DoT: AddCombatEvent(entityId, new CombatEvent.DoT { Snapshot = p.Snapshot(), Amount = param2 }); break;
                 case ActorControlCategory.HoT:
                     if (param1 != 0) {
                         var sourceName = Service.ObjectTable.SearchById(entityId)?.Name.TextValue;
                         var status = Service.DataManager.GetExcelSheet<Status>().GetRowOrDefault(param1);
-                        combatEvents.AddEntry(entityId,
+                        AddCombatEvent(entityId,
                             new CombatEvent.Healed {
                                 Snapshot = p.Snapshot(),
                                 Source = sourceName,
@@ -169,13 +182,13 @@ public class CombatEventCapture : IDisposable {
                                 Crit = param4 == 1
                             });
                     } else {
-                        combatEvents.AddEntry(entityId, new CombatEvent.HoT { Snapshot = p.Snapshot(), Amount = param2 });
+                        AddCombatEvent(entityId, new CombatEvent.HoT { Snapshot = p.Snapshot(), Amount = param2 });
                     }
 
                     break;
                 case ActorControlCategory.Death: {
                     if (combatEvents.Remove(entityId, out var events)) {
-                        var death = new Death { PlayerId = entityId, PlayerName = p.Name.TextValue, TimeOfDeath = DateTime.Now, Events = events };
+                        var death = new Death { PlayerId = entityId, PlayerName = p.Name.TextValue, TimeOfDeath = DateTime.Now, Events = events.ToList() };
                         plugin.DeathsPerPlayer.AddEntry(entityId, death);
                         plugin.NotificationHandler.DisplayDeath(death);
                     }
@@ -197,11 +210,11 @@ public class CombatEventCapture : IDisposable {
                 return;
 
             if (Service.ObjectTable.SearchById(targetId) is not IPlayerCharacter p)
-                return;
+                 return;
 
-            var effects = (StatusEffectAddEntry*)message->Effects;
-            var effectCount = Math.Min(message->EffectCount, 4u);
-            for (uint j = 0; j < effectCount; j++) {
+                var effects = (StatusEffectAddEntry*)message->Effects;
+                var effectCount = Math.Min(message->EffectCount, 4u);
+                for (uint j = 0; j < effectCount; j++) {
                 var effect = effects[j];
                 var effectId = effect.EffectId;
                 if (effectId <= 0)
@@ -212,7 +225,7 @@ public class CombatEventCapture : IDisposable {
                 var source = Service.ObjectTable.SearchById(effect.SourceActorId)?.Name.TextValue;
                 var status = Service.DataManager.GetExcelSheet<Status>().GetRowOrDefault(effectId);
 
-                combatEvents.AddEntry(targetId,
+                AddCombatEvent(targetId,
                     new CombatEvent.StatusEffect {
                         Snapshot = p.Snapshot(),
                         Id = effectId,
@@ -222,29 +235,29 @@ public class CombatEventCapture : IDisposable {
                         Description = status?.Description.ExtractText(),
                         Category = (StatusCategory)(status?.StatusCategory ?? 0),
                         Source = source,
-                        Duration = effect.Duration
-                    });
-            }
+                         Duration = effect.Duration
+                     });
+             }
         } catch (Exception e) {
             Service.PluginLog.Error(e, "Caught unexpected exception");
         }
     }
 
     public void CleanCombatEvents() {
+        var startTicks = Stopwatch.GetTimestamp();
         try {
+            var now = DateTime.Now;
+            var combatEventCutOffTime = now - TimeSpan.FromSeconds(plugin.Configuration.KeepCombatEventsForSeconds);
+
             var entriesToRemove = new List<ulong>();
             foreach (var (id, events) in combatEvents) {
-                if (events.Count == 0 || (DateTime.Now - events.Last().Snapshot.Time).TotalSeconds > plugin.Configuration.KeepCombatEventsForSeconds) {
-                    entriesToRemove.Add(id);
-                    continue;
+                while (events.TryPeek(out var combatEvent) && combatEvent.Snapshot.Time <= combatEventCutOffTime) {
+                    events.Dequeue();
                 }
 
-                var cutOffTime = DateTime.Now - TimeSpan.FromSeconds(plugin.Configuration.KeepCombatEventsForSeconds);
-                for (var i = 0; i < events.Count; i++)
-                    if (events[i].Snapshot.Time > cutOffTime) {
-                        events.RemoveRange(0, i);
-                        break;
-                    }
+                if (events.Count == 0) {
+                    entriesToRemove.Add(id);
+                }
             }
 
             foreach (var entry in entriesToRemove)
@@ -253,12 +266,12 @@ public class CombatEventCapture : IDisposable {
             entriesToRemove.Clear();
 
             foreach (var (id, death) in plugin.DeathsPerPlayer) {
-                if (death.Count == 0 || (DateTime.Now - death.Last().TimeOfDeath).TotalMinutes > plugin.Configuration.KeepDeathsForMinutes) {
+                if (death.Count == 0 || (now - death.Last().TimeOfDeath).TotalMinutes > plugin.Configuration.KeepDeathsForMinutes) {
                     entriesToRemove.Add(id);
                     continue;
                 }
 
-                var cutOffTime = DateTime.Now - TimeSpan.FromMinutes(plugin.Configuration.KeepDeathsForMinutes);
+                var cutOffTime = now - TimeSpan.FromMinutes(plugin.Configuration.KeepDeathsForMinutes);
                 for (var i = 0; i < death.Count; i++)
                     if (death[i].TimeOfDeath > cutOffTime) {
                         death.RemoveRange(0, i);
@@ -270,6 +283,22 @@ public class CombatEventCapture : IDisposable {
                 plugin.DeathsPerPlayer.Remove(entry);
         } catch (Exception e) {
             Service.PluginLog.Error(e, "Error while clearing events");
+        } finally {
+            var elapsedMs = (Stopwatch.GetTimestamp() - startTicks) * 1000.0 / Stopwatch.Frequency;
+            if (elapsedMs > 50 && DateTime.Now - lastCleanPerfLog > TimeSpan.FromSeconds(30)) {
+                lastCleanPerfLog = DateTime.Now;
+
+                var totalCombatEvents = 0;
+                foreach (var q in combatEvents.Values)
+                    totalCombatEvents += q.Count;
+
+                var totalDeaths = 0;
+                foreach (var d in plugin.DeathsPerPlayer.Values)
+                    totalDeaths += d.Count;
+
+                Service.PluginLog.Warning(
+                    $"CleanCombatEvents took {elapsedMs:N1}ms (combatTargets={combatEvents.Count}, combatEvents={totalCombatEvents}, deathTargets={plugin.DeathsPerPlayer.Count}, deaths={totalDeaths})");
+            }
         }
     }
 
